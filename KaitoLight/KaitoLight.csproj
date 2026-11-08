@@ -12,6 +12,7 @@
     <LangVersion>7.3</LangVersion>
     <Prefer32Bit>false</Prefer32Bit>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
@@ -36,9 +37,13 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Ui.cs" />
+    <Compile Include="Strings.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.manifest" />
+    <EmbeddedResource Include="app.ico">
+      <LogicalName>KaitoLight.app.ico</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

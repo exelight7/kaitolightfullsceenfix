@@ -20,8 +20,28 @@ namespace KaitoLight
         /// <summary>Exe names the user switched off.</summary>
         public static readonly HashSet<string> Skipped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Every game we've recognised: exe name → full exe path (for the "All games" list).</summary>
+        public static readonly Dictionary<string, string> Known = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         public static bool Paused { get; set; }
         public static bool TrayHintShown { get; set; }
+        public static string Lang { get; set; } = "";
+
+        /// <summary>Remember a game; returns true if it was new (caller decides when to save).</summary>
+        public static bool Remember(string exeName, string exePath)
+        {
+            if (string.IsNullOrEmpty(exeName) || string.IsNullOrEmpty(exePath)) return false;
+            if (Known.TryGetValue(exeName, out var old) && string.Equals(old, exePath, StringComparison.OrdinalIgnoreCase)) return false;
+            Known[exeName] = exePath;
+            return true;
+        }
+
+        public static void Forget(string exeName)
+        {
+            Known.Remove(exeName);
+            Games.Remove(exeName);
+            Skipped.Remove(exeName);
+        }
 
         public static void Load()
         {
@@ -40,6 +60,11 @@ namespace KaitoLight
                         case "skip": Skipped.Add(val); break;
                         case "paused": Paused = val == "1"; break;
                         case "trayhint": TrayHintShown = val == "1"; break;
+                        case "lang": Lang = val; break;
+                        case "known":
+                            var bar = val.IndexOf('|');
+                            if (bar > 0) Known[val.Substring(0, bar)] = val.Substring(bar + 1);
+                            break;
                     }
                 }
             }
@@ -57,8 +82,10 @@ namespace KaitoLight
                 var lines = new List<string>
                 {
                     "paused=" + (Paused ? "1" : "0"),
-                    "trayhint=" + (TrayHintShown ? "1" : "0")
+                    "trayhint=" + (TrayHintShown ? "1" : "0"),
+                    "lang=" + Lang
                 };
+                lines.AddRange(Known.Select(k => "known=" + k.Key + "|" + k.Value));
                 lines.AddRange(Games.Select(g => "game=" + g));
                 lines.AddRange(Skipped.Select(g => "skip=" + g));
                 File.WriteAllLines(FilePath, lines);

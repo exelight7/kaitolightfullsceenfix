@@ -10,11 +10,25 @@ namespace KaitoLight
         private static void Main(string[] args)
         {
             // Only one copy at a time
-            using (var mutex = new Mutex(true, "KaitoLight.SingleInstance", out var isNew))
+            Store.Load();
+            L.Init(Store.Lang);
+
+            // after a language switch the old copy may still be closing; wait briefly for it
+            var restarting = Array.Exists(args, a => a.Equals("--restart", StringComparison.OrdinalIgnoreCase));
+            using (var mutex = new Mutex(false, "KaitoLight.SingleInstance"))
             {
+                bool isNew;
+                try
+                {
+                    isNew = mutex.WaitOne(restarting ? 5000 : 0);
+                }
+                catch (AbandonedMutexException)
+                {
+                    isNew = true;
+                }
                 if (!isNew)
                 {
-                    MessageBox.Show("البرنامج يعمل بالفعل. يمكنك الوصول إليه من منطقة الإشعارات بجوار الساعة.", "KaitoLight",
+                    MessageBox.Show(L.AlreadyRunning, "KaitoLight",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }

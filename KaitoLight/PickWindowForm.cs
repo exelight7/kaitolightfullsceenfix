@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
@@ -17,7 +17,7 @@ namespace KaitoLight
         {
             _iconFor = iconFor;
 
-            Text = "إضافة لعبة";
+            Text = L.PickTitle;
             ClientSize = new Size(480, 520);
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -26,7 +26,7 @@ namespace KaitoLight
             BackColor = Theme.Back;
             ForeColor = Theme.Text;
             Font = Theme.Font(10);
-            RightToLeft = RightToLeft.Yes;
+            RightToLeft = L.Rtl;
             RightToLeftLayout = false;
 
             var hint = new Label
@@ -34,9 +34,9 @@ namespace KaitoLight
                 Dock = DockStyle.Top,
                 Height = 64,
                 Padding = new Padding(16, 12, 16, 0),
-                Text = "تأكّد من تشغيل اللعبة، ثم اخترها من القائمة.\nسيتذكّرها البرنامج ويحوّلها تلقائيًا في كل مرة تُشغَّل فيها.",
+                Text = L.PickHint,
                 ForeColor = Theme.Muted,
-                TextAlign = ContentAlignment.MiddleRight
+                TextAlign = L.Ar ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft
             };
 
             _list = new ListBox
@@ -57,7 +57,7 @@ namespace KaitoLight
             var bottom = new Panel { Dock = DockStyle.Bottom, Height = 66, Padding = new Padding(16, 12, 16, 12) };
             var ok = new FlatButton
             {
-                Text = "إضافة",
+                Text = L.PickAdd,
                 Font = Theme.Font(10.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(240, 244, 243),
                 Fill = Theme.AccentDim,
@@ -69,7 +69,7 @@ namespace KaitoLight
             ok.Click += (s, e) => Accept();
             var cancel = new FlatButton
             {
-                Text = "إلغاء",
+                Text = L.Cancel,
                 ForeColor = Theme.Muted,
                 Dock = DockStyle.Left,
                 Width = 110
@@ -87,7 +87,7 @@ namespace KaitoLight
 
             if (windows.Count == 0)
             {
-                hint.Text = "لا توجد نوافذ مفتوحة حاليًا.\nشغّل اللعبة أولًا، ثم أعد فتح هذه النافذة.";
+                hint.Text = L.PickNone;
             }
         }
 
@@ -125,10 +125,13 @@ namespace KaitoLight
             }
 
             var icon = _iconFor(w.ExePath);
-            if (icon != null) g.DrawIcon(icon, new Rectangle(e.Bounds.Right - 44, e.Bounds.Y + 7, 32, 32));
+            var iconX = L.Ar ? e.Bounds.Right - 44 : e.Bounds.X + 12;
+            if (icon != null) g.DrawIcon(icon, new Rectangle(iconX, e.Bounds.Y + 7, 32, 32));
 
-            var text = new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 64, e.Bounds.Height);
-            var flags = TextFormatFlags.Right | TextFormatFlags.RightToLeft | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+            var text = L.Ar
+                ? new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 64, e.Bounds.Height)
+                : new Rectangle(e.Bounds.X + 54, e.Bounds.Y, e.Bounds.Width - 64, e.Bounds.Height);
+            var flags = L.Align | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
             TextRenderer.DrawText(g, w.DisplayName, Theme.Font(10.5f, FontStyle.Bold),
                 new Rectangle(text.X, text.Y + 4, text.Width, 20), Theme.Text, flags);
             TextRenderer.DrawText(g, w.ExeName + ".exe", Theme.Font(8.5f),

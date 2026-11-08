@@ -1,14 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 
 namespace KaitoLight
 {
     /// <summary>
-    ///     The whole app on one screen: the service switch, the running games as cards, and a button
-    ///     to add a game by hand. Closing hides to the notification area; the enforcer keeps running.
+    ///     The whole app on one screen: the service switch, the games (running now / all remembered),
+    ///     and a button to add a game by hand. It lives in the notification area; closing just hides it.
     /// </summary>
     internal class MainForm : Form
     {
@@ -16,38 +18,39 @@ namespace KaitoLight
         private readonly Dictionary<string, Icon> _icons = new Dictionary<string, Icon>(StringComparer.OrdinalIgnoreCase);
         private readonly bool _startHidden;
         private readonly bool _silent;
-        private Icon _iconOn;
-        private Icon _iconOff;
-        private ToolStripMenuItem _trayStatus;
+        private readonly Icon _iconOn;
+        private readonly Icon _iconOff;
 
         private PowerButton _power;
-        private Label _countLabel;
+        private Tabs _tabs;
         private FlowLayoutPanel _list;
         private Panel _empty;
         private CheckBox _startup;
         private NotifyIcon _tray;
+        private ToolStripMenuItem _trayStatus;
         private ToolStripMenuItem _trayPause;
         private Timer _timer;
         private bool _exiting;
         private string _cardsKey = "";
 
+        private bool ShowingAll => _tabs.Selected == 1;
+
         public MainForm(bool startHidden, bool silent)
         {
             _startHidden = startHidden;
             _silent = silent;
-            Store.Load();
 
             Text = "KaitoLight";
-            _iconOn = MakeAppIcon(false);
+            _iconOn = LoadAppIcon() ?? MakeAppIcon(false);
             _iconOff = MakeAppIcon(true);
             Icon = _iconOn;
-            ClientSize = new Size(560, 660);
-            MinimumSize = new Size(480, 520);
+            ClientSize = new Size(560, 680);
+            MinimumSize = new Size(480, 540);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Back;
             ForeColor = Theme.Text;
             Font = Theme.Font(10);
-            RightToLeft = RightToLeft.Yes;
+            RightToLeft = L.Rtl;
             DoubleBuffered = true;
 
             BuildHeader();
@@ -71,22 +74,8 @@ namespace KaitoLight
                 using (var pen = new Pen(Theme.Border)) e.Graphics.DrawLine(pen, 0, header.Height - 1, header.Width, header.Height - 1);
             };
 
-            var title = new Label
-            {
-                Text = "KaitoLight",
-                Font = Theme.Font(20, FontStyle.Bold),
-                ForeColor = Theme.Text,
-                AutoSize = true,
-                Location = new Point(0, 18)
-            };
-            var subtitle = new Label
-            {
-                Text = "أداة لتشغيل الألعاب في وضع ملء الشاشة دون إطار",
-                Font = Theme.Font(10.5f),
-                ForeColor = Theme.Muted,
-                AutoSize = true,
-                Location = new Point(0, 58)
-            };
+            var title = new Label { Text = "KaitoLight", Font = Theme.Font(20, FontStyle.Bold), ForeColor = Theme.Text, AutoSize = true, Top = 18 };
+            var subtitle = new Label { Text = L.Subtitle, Font = Theme.Font(10.5f), ForeColor = Theme.Muted, AutoSize = true, Top = 58 };
 
             _power = new PowerButton { On = !Store.Paused };
             _power.Click += (s, e) => SetPaused(!Store.Paused);
@@ -96,8 +85,10 @@ namespace KaitoLight
             header.Controls.Add(_power);
             header.Resize += (s, e) =>
             {
-                title.Left = header.ClientSize.Width - header.Padding.Right - title.Width;
-                subtitle.Left = header.ClientSize.Width - header.Padding.Right - subtitle.Width;
+                // RightToLeft doesn't mirror absolute positions, so place labels on the reading-direction start
+                var start = L.Ar ? header.ClientSize.Width - header.Padding.Right : header.Padding.Left;
+                title.Left = L.Ar ? start - title.Width : start;
+                subtitle.Left = L.Ar ? start - subtitle.Width : start;
                 _power.SetBounds(header.Padding.Left, 96, header.ClientSize.Width - header.Padding.Horizontal, 70);
             };
             Controls.Add(header);
@@ -105,17 +96,15 @@ namespace KaitoLight
 
         private void BuildList()
         {
-            var section = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24, 10, 24, 0), BackColor = Theme.Back };
+            var section = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24, 14, 24, 0), BackColor = Theme.Back };
 
-            _countLabel = new Label
+            _tabs = new Tabs { Dock = DockStyle.Top, Height = 40, Items = new[] { L.TabRunning, L.TabAll } };
+            _tabs.SelectedChanged += (s, e) =>
             {
-                Dock = DockStyle.Top,
-                Height = 38,
-                Font = Theme.Font(10.5f, FontStyle.Bold),
-                ForeColor = Theme.Muted,
-                TextAlign = ContentAlignment.MiddleRight,
-                Text = "الألعاب قيد التشغيل"
+                _cardsKey = "";
+                RefreshCards();
             };
+            var gap = new Panel { Dock = DockStyle.Top, Height = 12, BackColor = Theme.Back };
 
             _list = new FlowLayoutPanel
             {
@@ -140,18 +129,20 @@ namespace KaitoLight
                 {
                     g.DrawPath(pen, p);
                 }
-                var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.RightToLeft | TextFormatFlags.WordBreak;
-                TextRenderer.DrawText(g, Store.Paused ? "الخدمة متوقفة" : "لا توجد ألعاب قيد التشغيل",
-                    Theme.Font(13, FontStyle.Bold), new Rectangle(16, 46, r.Width - 32, 30), Theme.Text, flags);
-                TextRenderer.DrawText(g,
-                    Store.Paused
-                        ? "فعّل الخدمة من الأعلى لاستئناف تحويل الألعاب."
-                        : "شغّل أي لعبة، وستظهر هنا وتُحوَّل إلى ملء الشاشة دون إطار تلقائيًا.",
-                    Theme.Font(10), new Rectangle(24, 84, r.Width - 48, 50), Theme.Muted, flags);
+
+                string head, hint;
+                if (ShowingAll) { head = L.EmptyAll; hint = L.EmptyAllHint; }
+                else if (Store.Paused) { head = L.ServiceOff; hint = L.EmptyPausedHint; }
+                else { head = L.EmptyRunning; hint = L.EmptyRunningHint; }
+
+                var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.WordBreak | (L.Ar ? TextFormatFlags.RightToLeft : 0);
+                TextRenderer.DrawText(g, head, Theme.Font(13, FontStyle.Bold), new Rectangle(16, 46, r.Width - 32, 30), Theme.Text, flags);
+                TextRenderer.DrawText(g, hint, Theme.Font(10), new Rectangle(24, 84, r.Width - 48, 50), Theme.Muted, flags);
             };
 
             section.Controls.Add(_list);
-            section.Controls.Add(_countLabel);
+            section.Controls.Add(gap);
+            section.Controls.Add(_tabs);
             Controls.Add(section);
             section.BringToFront();
         }
@@ -166,19 +157,29 @@ namespace KaitoLight
 
             var add = new FlatButton
             {
-                Text = "إضافة لعبة يدويًا",
+                Text = L.AddGame,
                 Font = Theme.Font(10, FontStyle.Bold),
                 ForeColor = Theme.Text,
-                Fill = Theme.Card,
                 FillHover = Theme.AccentDim,
                 Dock = DockStyle.Right,
                 Width = 170
             };
             add.Click += (s, e) => AddGameByHand();
 
+            var lang = new FlatButton
+            {
+                Text = L.OtherLanguage,
+                Font = Theme.Font(9.5f),
+                ForeColor = Theme.Muted,
+                Dock = DockStyle.Right,
+                Width = 92
+            };
+            lang.Click += (s, e) => SwitchLanguage();
+            var spacer = new Panel { Dock = DockStyle.Right, Width = 8, BackColor = Theme.Back };
+
             _startup = new CheckBox
             {
-                Text = "التشغيل مع بدء Windows",
+                Text = L.StartWithWindows,
                 ForeColor = Theme.Muted,
                 Font = Theme.Font(10),
                 AutoSize = true,
@@ -188,23 +189,22 @@ namespace KaitoLight
             };
             _startup.CheckedChanged += (s, e) => Store.SetStartWithWindows(_startup.Checked);
 
-            footer.Controls.Add(add);
             footer.Controls.Add(_startup);
+            footer.Controls.Add(lang);
+            footer.Controls.Add(spacer);
+            footer.Controls.Add(add);
             Controls.Add(footer);
         }
 
         private void BuildTray()
         {
             _trayStatus = new ToolStripMenuItem { Enabled = false };
-            _trayPause = new ToolStripMenuItem("", null, (s, e) => SetPaused(!Store.Paused))
-            {
-                Font = Theme.Font(10, FontStyle.Bold)
-            };
+            _trayPause = new ToolStripMenuItem("", null, (s, e) => SetPaused(!Store.Paused)) { Font = Theme.Font(10, FontStyle.Bold) };
 
             var menu = new ContextMenuStrip
             {
-                RightToLeft = RightToLeft.Yes,
-                Renderer = new ToolStripProfessionalRenderer(new TrayColors()),
+                RightToLeft = L.Rtl,
+                Renderer = new ToolStripProfessionalRenderer(new MenuColors()),
                 BackColor = Theme.Card,
                 ForeColor = Theme.Text,
                 Font = Theme.Font(10),
@@ -214,11 +214,10 @@ namespace KaitoLight
             menu.Items.Add(_trayStatus);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(_trayPause);
-            menu.Items.Add("فتح نافذة البرنامج", null, (s, e) => ShowFromTray());
+            menu.Items.Add(L.TrayOpen, null, (s, e) => ShowFromTray());
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("إنهاء البرنامج", null, (s, e) => ExitApp());
+            menu.Items.Add(L.TrayExit, null, (s, e) => ExitApp());
             foreach (ToolStripItem item in menu.Items) item.ForeColor = Theme.Text;
-            _trayStatus.ForeColor = Theme.Muted;
 
             _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true };
             // a single left click opens the same menu, so turning it off is one click away
@@ -237,13 +236,14 @@ namespace KaitoLight
         {
             var on = !Store.Paused;
             _tray.Icon = on ? _iconOn : _iconOff;
-            _tray.Text = on ? "KaitoLight — الخدمة مفعّلة" : "KaitoLight — الخدمة متوقفة";
-            _trayStatus.Text = on ? "●  الخدمة مفعّلة" : "○  الخدمة متوقفة";
-            _trayPause.Text = on ? "إيقاف الخدمة" : "تفعيل الخدمة";
+            _tray.Text = "KaitoLight — " + (on ? L.ServiceOn : L.ServiceOff);
+            _trayStatus.Text = on ? L.TrayOn : L.TrayOff;
+            _trayStatus.ForeColor = Theme.Muted;
+            _trayPause.Text = on ? L.TrayPause : L.TrayResume;
             Icon = _tray.Icon;
         }
 
-        private class TrayColors : ProfessionalColorTable
+        private class MenuColors : ProfessionalColorTable
         {
             public override Color ToolStripDropDownBackground => Theme.Card;
             public override Color MenuBorder => Theme.Border;
@@ -253,7 +253,7 @@ namespace KaitoLight
             public override Color SeparatorLight => Theme.Border;
         }
 
-        // ---------------------------------------------------------------- behaviour
+        // ---------------------------------------------------------------- window behaviour
 
         protected override void OnHandleCreated(EventArgs e)
         {
@@ -263,7 +263,7 @@ namespace KaitoLight
 
         protected override void SetVisibleCore(bool value)
         {
-            // --tray: start hidden without flashing the window
+            // start hidden in the notification area without flashing the window
             if (_startHidden && !IsHandleCreated)
             {
                 CreateHandle();
@@ -285,8 +285,7 @@ namespace KaitoLight
             once.Tick += (s, e) =>
             {
                 once.Dispose();
-                _tray.ShowBalloonTip(3000, "يعمل KaitoLight الآن",
-                    "البرنامج في منطقة الإشعارات بجوار الساعة. انقر على أيقونته لإيقاف الخدمة أو تفعيلها.", ToolTipIcon.Info);
+                _tray.ShowBalloonTip(3000, L.StartedTitle, L.StartedBody, ToolTipIcon.Info);
             };
             once.Start();
         }
@@ -295,14 +294,11 @@ namespace KaitoLight
         {
             if (!_exiting && e.CloseReason == CloseReason.UserClosing)
             {
-                // keep working in the background
                 e.Cancel = true;
                 Hide();
                 if (!Store.TrayHintShown)
                 {
-                    _tray.ShowBalloonTip(3000, "يعمل KaitoLight في الخلفية",
-                        "يستمر البرنامج في تحويل الألعاب. يمكنك الوصول إليه من منطقة الإشعارات، ولإنهائه انقر بزر الفأرة الأيمن ثم اختر «إنهاء البرنامج».",
-                        ToolTipIcon.Info);
+                    _tray.ShowBalloonTip(3000, L.BackgroundTitle, L.BackgroundBody, ToolTipIcon.Info);
                     Store.TrayHintShown = true;
                     Store.Save();
                 }
@@ -336,11 +332,30 @@ namespace KaitoLight
             _power.On = !paused;
             _power.Invalidate();
             UpdateTray();
-            _tray.ShowBalloonTip(1500, "KaitoLight", paused ? "توقفت الخدمة، وأُعيدت الألعاب إلى وضعها الأصلي." : "فُعّلت الخدمة.", ToolTipIcon.None);
+            _tray.ShowBalloonTip(1500, "KaitoLight", paused ? L.PausedToast : L.ResumedToast, ToolTipIcon.None);
             if (paused) _enforcer.RestoreAll();
             _cardsKey = "";
             Tick();
         }
+
+        private void SwitchLanguage()
+        {
+            Store.Lang = L.Ar ? "en" : "ar";
+            Store.Save();
+            L.Init(Store.Lang);
+            MessageBox.Show(this, L.RestartForLanguage, "KaitoLight", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            try
+            {
+                Process.Start(new ProcessStartInfo(Application.ExecutablePath, "--show --restart") { UseShellExecute = true });
+            }
+            catch
+            {
+                return;   // couldn't relaunch (UAC declined): keep running in the old language
+            }
+            ExitApp();
+        }
+
+        // ---------------------------------------------------------------- games
 
         private void Tick()
         {
@@ -348,12 +363,50 @@ namespace KaitoLight
             if (Visible) RefreshCards();
         }
 
+        /// <summary>Running tab: live windows. All tab: every remembered game, live where it's open.</summary>
+        private List<GameWindow> VisibleGames()
+        {
+            var running = _enforcer.Games;
+            if (!ShowingAll) return running.ToList();
+
+            var byExe = running.GroupBy(g => g.ExeName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            return Store.Known
+                .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(k => byExe.TryGetValue(k.Key, out var live)
+                    ? live
+                    : new GameWindow
+                    {
+                        ExeName = k.Key,
+                        ExePath = k.Value,
+                        Title = PrettyName(k.Value, k.Key),
+                        State = GameState.NotRunning
+                    })
+                .ToList();
+        }
+
+        /// <summary>Use the exe's product name ("Terraria") rather than the file name when we have it.</summary>
+        private static string PrettyName(string path, string fallback)
+        {
+            try
+            {
+                var info = FileVersionInfo.GetVersionInfo(path);
+                var name = string.IsNullOrWhiteSpace(info.ProductName) ? info.FileDescription : info.ProductName;
+                return string.IsNullOrWhiteSpace(name) ? fallback : name.Trim();
+            }
+            catch
+            {
+                return fallback;
+            }
+        }
+
         private void RefreshCards()
         {
-            var games = _enforcer.Games;
-            _countLabel.Text = games.Count == 0 ? "الألعاب قيد التشغيل" : $"الألعاب قيد التشغيل ({games.Count})";
+            var games = VisibleGames();
+            _tabs.Items = new[] { L.Count(L.TabRunning, _enforcer.Games.Count), L.Count(L.TabAll, Store.Known.Count) };
+            _tabs.Invalidate();
 
-            var key = string.Join("|", games.Select(g => g.Hwnd.ToInt64()));
+            var key = (ShowingAll ? "all:" : "run:") + string.Join("|", games.Select(g => g.ExeName + "@" + g.Hwnd.ToInt64()));
             if (key == _cardsKey)
             {
                 foreach (Control c in _list.Controls) c.Invalidate();   // states may have changed
@@ -368,17 +421,15 @@ namespace KaitoLight
                 if (c != _empty) c.Dispose();
             }
 
-            if (games.Count == 0)
-            {
-                _list.Controls.Add(_empty);
-            }
+            if (games.Count == 0) _list.Controls.Add(_empty);
 
             foreach (var game in games)
             {
                 var card = new GameCard(game) { GameIcon = IconFor(game.ExePath), Margin = new Padding(0, 0, 0, 10) };
                 card.ToggleClicked += (s, e) => ToggleGame(game);
-                card.CardClicked += (s, e) => _enforcer.Focus(game);
-                new ToolTip().SetToolTip(card, game.ExeName + ".exe — انقر للانتقال إلى اللعبة");
+                card.CardClicked += (s, e) => OpenGame(game);
+                card.MenuRequested += (s, e) => ShowCardMenu(card, game, e.Location);
+                new ToolTip().SetToolTip(card, game.ExeName + ".exe — " + (game.State == GameState.NotRunning ? L.CardTipLaunch : L.CardTip));
                 _list.Controls.Add(card);
             }
             SizeCards();
@@ -391,17 +442,70 @@ namespace KaitoLight
             foreach (Control c in _list.Controls) c.Width = Math.Max(200, w);
         }
 
+        private void OpenGame(GameWindow game)
+        {
+            if (game.State != GameState.NotRunning)
+            {
+                _enforcer.Focus(game);
+                return;
+            }
+            try
+            {
+                Process.Start(new ProcessStartInfo(game.ExePath)
+                {
+                    WorkingDirectory = Path.GetDirectoryName(game.ExePath) ?? "",
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                // file moved or launch refused
+            }
+        }
+
+        private void ShowCardMenu(Control card, GameWindow game, Point at)
+        {
+            var menu = new ContextMenuStrip
+            {
+                RightToLeft = L.Rtl,
+                Renderer = new ToolStripProfessionalRenderer(new MenuColors()),
+                BackColor = Theme.Card,
+                Font = Theme.Font(10),
+                ShowImageMargin = false
+            };
+            menu.Items.Add(L.OpenFolder, null, (s, e) =>
+            {
+                try { Process.Start("explorer.exe", "/select,\"" + game.ExePath + "\""); } catch { }
+            });
+            if (game.State == GameState.NotRunning)
+            {
+                menu.Items.Add(L.RemoveFromList, null, (s, e) =>
+                {
+                    Store.Forget(game.ExeName);
+                    Store.Save();
+                    _cardsKey = "";
+                    RefreshCards();
+                });
+            }
+            foreach (ToolStripItem item in menu.Items) item.ForeColor = Theme.Text;
+            menu.Closed += (s, e) => BeginInvoke(new Action(menu.Dispose));
+            menu.Show(card, at);
+        }
+
         private void ToggleGame(GameWindow game)
         {
             if (Store.Skipped.Remove(game.ExeName))
             {
-                _enforcer.Enforce(game);
+                if (game.Hwnd != IntPtr.Zero) _enforcer.Enforce(game);
             }
             else
             {
                 Store.Skipped.Add(game.ExeName);
-                _enforcer.Restore(game);
-                game.State = GameState.Off;
+                if (game.Hwnd != IntPtr.Zero)
+                {
+                    _enforcer.Restore(game);
+                    game.State = GameState.Off;
+                }
             }
             Store.Save();
             foreach (Control c in _list.Controls) c.Invalidate();
@@ -416,6 +520,7 @@ namespace KaitoLight
                 if (pick.ShowDialog(this) != DialogResult.OK || pick.Picked == null) return;
                 Store.Games.Add(pick.Picked.ExeName);
                 Store.Skipped.Remove(pick.Picked.ExeName);
+                Store.Remember(pick.Picked.ExeName, pick.Picked.ExePath);
                 Store.Save();
             }
             _cardsKey = "";
@@ -427,13 +532,31 @@ namespace KaitoLight
             if (string.IsNullOrEmpty(exePath)) return null;
             if (!_icons.TryGetValue(exePath, out var icon))
             {
-                _icons[exePath] = icon = Enforcer.IconFor(exePath);
+                _icons[exePath] = icon = File.Exists(exePath) ? Enforcer.IconFor(exePath) : null;
             }
             return icon;
         }
 
-        /// <summary>A simple flat teal tile with a light frame-less "screen" mark, so no .ico file is needed.</summary>
-        private static Icon MakeAppIcon(bool off)
+        // ---------------------------------------------------------------- icons
+
+        /// <summary>The real app.ico embedded in the exe (sized for the tray).</summary>
+        private static Icon LoadAppIcon()
+        {
+            try
+            {
+                using (var s = typeof(MainForm).Assembly.GetManifestResourceStream("KaitoLight.app.ico"))
+                {
+                    return s == null ? null : new Icon(s, SystemInformation.SmallIconSize);
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>Flat tile with four corner brackets ("fullscreen"); gray variant marks the service as off.</summary>
+        internal static Icon MakeAppIcon(bool off)
         {
             using (var bmp = new Bitmap(64, 64))
             {
@@ -445,9 +568,13 @@ namespace KaitoLight
                     {
                         g.FillPath(b, p);
                     }
-                    using (var pen = new Pen(Color.FromArgb(235, 242, 241), 5f) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round })
+                    using (var pen = new Pen(Color.FromArgb(235, 242, 241), 5f)
                     {
-                        // four corner brackets = "fullscreen"
+                        StartCap = System.Drawing.Drawing2D.LineCap.Round,
+                        EndCap = System.Drawing.Drawing2D.LineCap.Round,
+                        LineJoin = System.Drawing.Drawing2D.LineJoin.Round
+                    })
+                    {
                         g.DrawLines(pen, new[] { new PointF(16, 26), new PointF(16, 16), new PointF(26, 16) });
                         g.DrawLines(pen, new[] { new PointF(38, 16), new PointF(48, 16), new PointF(48, 26) });
                         g.DrawLines(pen, new[] { new PointF(48, 38), new PointF(48, 48), new PointF(38, 48) });

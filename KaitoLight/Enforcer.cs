@@ -12,7 +12,8 @@ namespace KaitoLight
     {
         Borderless,   // we forced it and it is staying borderless
         Waiting,      // minimized / loading
-        Off           // user switched this game off
+        Off,          // user switched this game off
+        NotRunning    // a remembered game that isn't open right now
     }
 
     internal class GameWindow
@@ -50,11 +51,13 @@ namespace KaitoLight
         public bool Scan()
         {
             var changed = false;
+            var learned = false;
             var seen = new HashSet<IntPtr>();
 
             foreach (var w in FindGameWindows())
             {
                 seen.Add(w.Hwnd);
+                learned |= Store.Remember(w.ExeName, w.ExePath);
                 if (!_games.TryGetValue(w.Hwnd, out var g))
                 {
                     _games[w.Hwnd] = g = w;
@@ -77,7 +80,8 @@ namespace KaitoLight
                 changed = true;
             }
 
-            return changed;
+            if (learned) Store.Save();
+            return changed || learned;
         }
 
         public void Enforce(GameWindow g)

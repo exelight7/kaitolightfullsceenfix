@@ -81,7 +81,8 @@ namespace KaitoLight
                 g.FillPath(b, track);
             }
             var d = sw.Height - 8;
-            var x = on ? sw.Left + 4 : sw.Right - d - 4;   // RTL: "on" knob sits on the left
+            var onLeft = L.Ar;                              // RTL: "on" knob sits on the left
+            var x = on == onLeft ? sw.Left + 4 : sw.Right - d - 4;
             using (var knob = new SolidBrush(on ? Color.FromArgb(240, 244, 243) : Color.FromArgb(170, 175, 184)))
             {
                 g.FillEllipse(knob, x, sw.Top + 4, d, d);
@@ -105,20 +106,20 @@ namespace KaitoLight
                 using (var pen = new Pen(Theme.Border)) g.DrawPath(pen, path);
             }
 
-            // status dot
-            var dot = new RectangleF(r.Right - 30, r.Y + r.Height / 2 - 5, 10, 10);
+            // Arabic: dot + text on the right, switch on the left. English: mirrored.
+            var dotX = L.Ar ? r.Right - 30 : r.X + 20;
+            var dot = new RectangleF(dotX, r.Y + r.Height / 2 - 5, 10, 10);
             using (var b = new SolidBrush(On ? Theme.Ok : Theme.Muted)) g.FillEllipse(b, dot);
 
-            var flags = TextFormatFlags.Right | TextFormatFlags.RightToLeft | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
-            var textRight = (int) dot.X - 12;
-            var textLeft = 96;
-            TextRenderer.DrawText(g, On ? "الخدمة مفعّلة" : "الخدمة متوقفة", Theme.Font(12, FontStyle.Bold),
+            var flags = L.Align | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+            var textLeft = L.Ar ? 96 : (int) dot.Right + 12;
+            var textRight = L.Ar ? (int) dot.X - 12 : Width - 96;
+            TextRenderer.DrawText(g, On ? L.ServiceOn : L.ServiceOff, Theme.Font(12, FontStyle.Bold),
                 new Rectangle(textLeft, (int) r.Y + 12, textRight - textLeft, 24), Theme.Text, flags);
-            TextRenderer.DrawText(g,
-                On ? "يُحوَّل كل تطبيق ألعاب يُشغَّل إلى وضع ملء الشاشة دون إطار تلقائيًا." : "لن تُعدَّل نوافذ الألعاب حتى تُعاد الخدمة.",
+            TextRenderer.DrawText(g, On ? L.ServiceOnHint : L.ServiceOffHint,
                 Theme.Font(9.5f), new Rectangle(textLeft, (int) r.Y + 38, textRight - textLeft, 20), Theme.Muted, flags);
 
-            DrawSwitch(g, new Rectangle(22, (Height - 28) / 2, 54, 28), On);
+            DrawSwitch(g, new Rectangle(L.Ar ? 22 : Width - 22 - 54, (Height - 28) / 2, 54, 28), On);
         }
     }
 
@@ -139,11 +140,21 @@ namespace KaitoLight
             Height = 76;
         }
 
-        private Rectangle SwitchRect => new Rectangle(20, (Height - 26) / 2, 50, 26);
+        private Rectangle SwitchRect => new Rectangle(L.Ar ? 20 : Width - 20 - 50, (Height - 26) / 2, 50, 26);
+
+        /// <summary>Raised on right-click (remove / open folder).</summary>
+        public event MouseEventHandler MenuRequested;
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (e.Button == MouseButtons.Right) MenuRequested?.Invoke(this, e);
+        }
 
         protected override void OnMouseClick(MouseEventArgs e)
         {
             base.OnMouseClick(e);
+            if (e.Button != MouseButtons.Left) return;
             var hit = SwitchRect;
             hit.Inflate(10, 12);
             if (hit.Contains(e.Location)) ToggleClicked?.Invoke(this, EventArgs.Empty);
@@ -162,8 +173,8 @@ namespace KaitoLight
                 using (var pen = new Pen(Theme.Border)) g.DrawPath(pen, path);
             }
 
-            // icon tile
-            var tile = new RectangleF(r.Right - 64, r.Y + 14, 46, 46);
+            // icon tile (reading-direction start)
+            var tile = new RectangleF(L.Ar ? r.Right - 64 : r.X + 18, r.Y + 14, 46, 46);
             using (var tp = Theme.Round(tile, 10))
             using (var tb = new SolidBrush(Theme.Back))
             {
@@ -174,37 +185,54 @@ namespace KaitoLight
                 g.DrawIcon(GameIcon, new Rectangle((int) tile.X + 7, (int) tile.Y + 7, 32, 32));
             }
 
+            var skipped = Store.Skipped.Contains(Game.ExeName);
             string status;
             Color statusColor;
             switch (Game.State)
             {
                 case GameState.Borderless:
-                    status = "يعمل بملء الشاشة دون إطار";
+                    status = L.StateBorderless;
                     statusColor = Theme.Ok;
                     break;
                 case GameState.Waiting:
-                    status = "بانتظار ظهور نافذة اللعبة";
+                    status = L.StateWaiting;
                     statusColor = Theme.Wait;
                     break;
+                case GameState.NotRunning:
+                    status = skipped ? L.StateOffGame : L.StateNotRunning;
+                    statusColor = Theme.Off;
+                    break;
                 default:
-                    status = Store.Paused ? "الخدمة متوقفة" : "التحويل معطّل لهذه اللعبة";
+                    status = Store.Paused && !skipped ? L.ServiceOff : L.StateOffGame;
                     statusColor = Theme.Muted;
                     break;
             }
 
-            var textRight = (int) tile.X - 14;
-            var textLeft = SwitchRect.Right + 18;
-            var flags = TextFormatFlags.Right | TextFormatFlags.RightToLeft | TextFormatFlags.EndEllipsis |
-                        TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
+            var sw = SwitchRect;
+            int textLeft, textRight;
+            if (L.Ar)
+            {
+                textRight = (int) tile.X - 14;
+                textLeft = sw.Right + 18;
+            }
+            else
+            {
+                textLeft = (int) tile.Right + 14;
+                textRight = sw.Left - 18;
+            }
+            var flags = L.Align | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
             TextRenderer.DrawText(g, Game.DisplayName, Theme.Font(11.5f, FontStyle.Bold),
                 new Rectangle(textLeft, (int) r.Y + 14, textRight - textLeft, 24), Theme.Text, flags);
 
             // small status dot + text
-            var statusRect = new Rectangle(textLeft, (int) r.Y + 42, textRight - textLeft - 14, 20);
-            using (var b = new SolidBrush(statusColor)) g.FillEllipse(b, textRight - 8, statusRect.Y + 7, 7, 7);
+            var dotX = L.Ar ? textRight - 8 : textLeft;
+            var statusRect = L.Ar
+                ? new Rectangle(textLeft, (int) r.Y + 42, textRight - textLeft - 14, 20)
+                : new Rectangle(textLeft + 14, (int) r.Y + 42, textRight - textLeft - 14, 20);
+            using (var b = new SolidBrush(statusColor)) g.FillEllipse(b, dotX, statusRect.Y + 7, 7, 7);
             TextRenderer.DrawText(g, status, Theme.Font(9.5f), statusRect, Theme.Muted, flags);
 
-            DrawSwitch(g, SwitchRect, Game.State != GameState.Off);
+            DrawSwitch(g, sw, !skipped);
         }
     }
 
@@ -226,7 +254,61 @@ namespace KaitoLight
                 using (var pen = new Pen(Outline)) g.DrawPath(pen, p);
             }
             TextRenderer.DrawText(g, Text, Font, ClientRectangle, ForeColor,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.RightToLeft);
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | (L.Ar ? TextFormatFlags.RightToLeft : 0));
+        }
+    }
+
+    /// <summary>Two-option segmented control ("Running" / "All games").</summary>
+    internal class Tabs : DrawnControl
+    {
+        public string[] Items { get; set; } = new string[0];
+        public int Selected { get; set; }
+        public event EventHandler SelectedChanged;
+
+        private Rectangle ItemRect(int i)
+        {
+            var w = (Width - 8) / Math.Max(1, Items.Length);
+            var visual = L.Ar ? Items.Length - 1 - i : i;   // first item on the reading-direction start
+            return new Rectangle(4 + visual * w, 4, w, Height - 8);
+        }
+
+        protected override void OnMouseClick(MouseEventArgs e)
+        {
+            base.OnMouseClick(e);
+            for (var i = 0; i < Items.Length; i++)
+            {
+                if (!ItemRect(i).Contains(e.Location) || i == Selected) continue;
+                Selected = i;
+                Invalidate();
+                SelectedChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            Theme.Smooth(g);
+            var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
+            using (var p = Theme.Round(r, 10))
+            {
+                using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, p);
+                using (var pen = new Pen(Theme.Border)) g.DrawPath(pen, p);
+            }
+            for (var i = 0; i < Items.Length; i++)
+            {
+                var ir = ItemRect(i);
+                if (i == Selected)
+                {
+                    using (var p = Theme.Round(ir, 7))
+                    using (var b = new SolidBrush(Theme.AccentDim))
+                    {
+                        g.FillPath(b, p);
+                    }
+                }
+                TextRenderer.DrawText(g, Items[i], Theme.Font(10, i == Selected ? FontStyle.Bold : FontStyle.Regular), ir,
+                    i == Selected ? Theme.Text : Theme.Muted,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | (L.Ar ? TextFormatFlags.RightToLeft : 0));
+            }
         }
     }
 }
