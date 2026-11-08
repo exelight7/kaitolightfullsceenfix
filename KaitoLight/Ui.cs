@@ -7,18 +7,21 @@ using System.Windows.Forms;
 
 namespace KaitoLight
 {
+    /// <summary>Calm, low-contrast dark palette: soft slate surfaces with one muted teal accent.</summary>
     internal static class Theme
     {
-        public static readonly Color Back = Color.FromArgb(15, 15, 26);
-        public static readonly Color Card = Color.FromArgb(28, 28, 46);
-        public static readonly Color CardHover = Color.FromArgb(38, 38, 62);
-        public static readonly Color Text = Color.FromArgb(240, 240, 252);
-        public static readonly Color Muted = Color.FromArgb(150, 150, 180);
-        public static readonly Color Violet = Color.FromArgb(124, 92, 255);
-        public static readonly Color Cyan = Color.FromArgb(0, 200, 255);
-        public static readonly Color Green = Color.FromArgb(40, 210, 130);
-        public static readonly Color Amber = Color.FromArgb(255, 184, 0);
-        public static readonly Color Gray = Color.FromArgb(90, 90, 115);
+        public static readonly Color Back = Color.FromArgb(22, 24, 29);
+        public static readonly Color Header = Color.FromArgb(27, 30, 36);
+        public static readonly Color Card = Color.FromArgb(31, 34, 41);
+        public static readonly Color CardHover = Color.FromArgb(37, 41, 49);
+        public static readonly Color Border = Color.FromArgb(44, 48, 57);
+        public static readonly Color Text = Color.FromArgb(226, 229, 234);
+        public static readonly Color Muted = Color.FromArgb(139, 146, 158);
+        public static readonly Color Accent = Color.FromArgb(94, 163, 156);      // muted teal
+        public static readonly Color AccentDim = Color.FromArgb(52, 84, 82);
+        public static readonly Color Ok = Color.FromArgb(125, 186, 142);         // soft sage
+        public static readonly Color Wait = Color.FromArgb(205, 172, 110);       // soft sand
+        public static readonly Color Off = Color.FromArgb(74, 79, 90);
 
         public static Font Font(float size, FontStyle style = FontStyle.Regular) => new Font("Segoe UI", size, style);
 
@@ -44,11 +47,13 @@ namespace KaitoLight
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
-        /// <summary>Dark title bar on Windows 10/11.</summary>
+        /// <summary>Dark title bar on Windows 10/11, tinted to match the header on Windows 11.</summary>
         public static void DarkTitleBar(IntPtr hwnd)
         {
             var on = 1;
             if (DwmSetWindowAttribute(hwnd, 20, ref on, 4) != 0) DwmSetWindowAttribute(hwnd, 19, ref on, 4);
+            var caption = Header.R | (Header.G << 8) | (Header.B << 16);   // COLORREF (0x00BBGGRR)
+            DwmSetWindowAttribute(hwnd, 35, ref caption, 4);               // DWMWA_CAPTION_COLOR
         }
     }
 
@@ -67,9 +72,24 @@ namespace KaitoLight
 
         protected override void OnMouseEnter(EventArgs e) { Hover = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { Hover = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected static void DrawSwitch(Graphics g, Rectangle sw, bool on)
+        {
+            using (var track = Theme.Round(sw, sw.Height / 2f))
+            using (var b = new SolidBrush(on ? Theme.Accent : Theme.Off))
+            {
+                g.FillPath(b, track);
+            }
+            var d = sw.Height - 8;
+            var x = on ? sw.Left + 4 : sw.Right - d - 4;   // RTL: "on" knob sits on the left
+            using (var knob = new SolidBrush(on ? Color.FromArgb(240, 244, 243) : Color.FromArgb(170, 175, 184)))
+            {
+                g.FillEllipse(knob, x, sw.Top + 4, d, d);
+            }
+        }
     }
 
-    /// <summary>The big "on / paused" button at the top.</summary>
+    /// <summary>Main service row at the top: status text on the right, a switch on the left.</summary>
     internal class PowerButton : DrawnControl
     {
         public bool On { get; set; } = true;
@@ -78,46 +98,33 @@ namespace KaitoLight
         {
             var g = e.Graphics;
             Theme.Smooth(g);
-            var r = new RectangleF(2, 2, Width - 5, Height - 5);
-            var a = On ? Color.FromArgb(30, 200, 120) : Color.FromArgb(95, 95, 120);
-            var b = On ? Color.FromArgb(0, 170, 220) : Color.FromArgb(70, 70, 95);
-            using (var path = Theme.Round(r, r.Height / 2))
-            using (var brush = new LinearGradientBrush(r, a, b, 0f))
+            var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
+            using (var path = Theme.Round(r, 12))
             {
-                g.FillPath(brush, path);
-                if (Hover)
-                {
-                    using (var glow = new SolidBrush(Color.FromArgb(35, 255, 255, 255))) g.FillPath(glow, path);
-                }
+                using (var b = new SolidBrush(Hover ? Theme.CardHover : Theme.Card)) g.FillPath(b, path);
+                using (var pen = new Pen(Theme.Border)) g.DrawPath(pen, path);
             }
 
-            var dot = new RectangleF(r.Right - r.Height + 8, r.Y + 8, r.Height - 16, r.Height - 16);
-            using (var white = new SolidBrush(Color.White)) g.FillEllipse(white, dot);
-            TextRenderer.DrawText(g, On ? "⏻" : "▶", Theme.Font(14, FontStyle.Bold), Rectangle.Round(dot),
-                On ? Color.FromArgb(20, 160, 110) : Color.FromArgb(90, 90, 115),
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            // status dot
+            var dot = new RectangleF(r.Right - 30, r.Y + r.Height / 2 - 5, 10, 10);
+            using (var b = new SolidBrush(On ? Theme.Ok : Theme.Muted)) g.FillEllipse(b, dot);
 
-            var text = new Rectangle((int) r.X + 18, (int) r.Y, (int) (r.Width - r.Height - 24), (int) r.Height);
-            TextRenderer.DrawText(g, On ? "شغّال — أي لعبة تفتحها تصير Borderless" : "موقوف — اضغط للتشغيل",
-                Theme.Font(12.5f, FontStyle.Bold), text, Color.White,
-                TextFormatFlags.Right | TextFormatFlags.RightToLeft | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            var flags = TextFormatFlags.Right | TextFormatFlags.RightToLeft | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+            var textRight = (int) dot.X - 12;
+            var textLeft = 96;
+            TextRenderer.DrawText(g, On ? "الخدمة مفعّلة" : "الخدمة متوقفة", Theme.Font(12, FontStyle.Bold),
+                new Rectangle(textLeft, (int) r.Y + 12, textRight - textLeft, 24), Theme.Text, flags);
+            TextRenderer.DrawText(g,
+                On ? "يُحوَّل كل تطبيق ألعاب يُشغَّل إلى وضع ملء الشاشة دون إطار تلقائيًا." : "لن تُعدَّل نوافذ الألعاب حتى تُعاد الخدمة.",
+                Theme.Font(9.5f), new Rectangle(textLeft, (int) r.Y + 38, textRight - textLeft, 20), Theme.Muted, flags);
+
+            DrawSwitch(g, new Rectangle(22, (Height - 28) / 2, 54, 28), On);
         }
     }
 
     /// <summary>One game: icon, name, status, and an on/off switch.</summary>
     internal class GameCard : DrawnControl
     {
-        private static readonly Color[][] Accents =
-        {
-            new[] { Color.FromArgb(255, 94, 98), Color.FromArgb(255, 153, 102) },
-            new[] { Color.FromArgb(124, 92, 255), Color.FromArgb(198, 92, 255) },
-            new[] { Color.FromArgb(0, 176, 255), Color.FromArgb(0, 224, 200) },
-            new[] { Color.FromArgb(255, 72, 162), Color.FromArgb(255, 128, 92) },
-            new[] { Color.FromArgb(46, 196, 120), Color.FromArgb(160, 220, 60) },
-            new[] { Color.FromArgb(255, 176, 0), Color.FromArgb(255, 110, 64) },
-            new[] { Color.FromArgb(64, 120, 255), Color.FromArgb(140, 82, 255) }
-        };
-
         public GameWindow Game { get; }
         public Icon GameIcon { get; set; }
 
@@ -129,10 +136,10 @@ namespace KaitoLight
         public GameCard(GameWindow game)
         {
             Game = game;
-            Height = 84;
+            Height = 76;
         }
 
-        private Rectangle SwitchRect => new Rectangle(18, (Height - 30) / 2, 58, 30);
+        private Rectangle SwitchRect => new Rectangle(20, (Height - 26) / 2, 50, 26);
 
         protected override void OnMouseClick(MouseEventArgs e)
         {
@@ -147,87 +154,57 @@ namespace KaitoLight
         {
             var g = e.Graphics;
             Theme.Smooth(g);
+            var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
 
-            var accent = Accents[(int) ((uint) Game.ExeName.ToLowerInvariant().GetHashCode() % Accents.Length)];
-            var r = new RectangleF(1, 1, Width - 3, Height - 3);
-            var on = Game.State != GameState.Off;
-
-            using (var path = Theme.Round(r, 16))
+            using (var path = Theme.Round(r, 12))
             {
                 using (var back = new SolidBrush(Hover ? Theme.CardHover : Theme.Card)) g.FillPath(back, path);
-
-                // colored strip on the right edge
-                var strip = new RectangleF(r.Right - 7, r.Y, 7, r.Height);
-                var oldClip = g.Clip;
-                g.SetClip(path);
-                using (var sb = new LinearGradientBrush(strip, accent[0], accent[1], 90f)) g.FillRectangle(sb, strip);
-                g.Clip = oldClip;
+                using (var pen = new Pen(Theme.Border)) g.DrawPath(pen, path);
             }
 
             // icon tile
-            var tile = new RectangleF(r.Right - 76, r.Y + 12, 56, 56);
-            using (var tp = Theme.Round(tile, 14))
-            using (var tb = new LinearGradientBrush(tile, accent[0], accent[1], 45f))
+            var tile = new RectangleF(r.Right - 64, r.Y + 14, 46, 46);
+            using (var tp = Theme.Round(tile, 10))
+            using (var tb = new SolidBrush(Theme.Back))
             {
                 g.FillPath(tb, tp);
             }
             if (GameIcon != null)
             {
-                g.DrawIcon(GameIcon, new Rectangle((int) tile.X + 12, (int) tile.Y + 12, 32, 32));
+                g.DrawIcon(GameIcon, new Rectangle((int) tile.X + 7, (int) tile.Y + 7, 32, 32));
             }
-            else
-            {
-                TextRenderer.DrawText(g, "🎮", new Font("Segoe UI Emoji", 18), Rectangle.Round(tile), Color.White,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-            }
-
-            // name + status
-            var textRight = (int) tile.X - 14;
-            var textLeft = SwitchRect.Right + 16;
-            var flags = TextFormatFlags.Right | TextFormatFlags.RightToLeft | TextFormatFlags.EndEllipsis |
-                        TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
-            TextRenderer.DrawText(g, Game.DisplayName, Theme.Font(13, FontStyle.Bold),
-                new Rectangle(textLeft, (int) r.Y + 14, textRight - textLeft, 28), Theme.Text, flags);
 
             string status;
             Color statusColor;
             switch (Game.State)
             {
                 case GameState.Borderless:
-                    status = "● Borderless ملء الشاشة";
-                    statusColor = Theme.Green;
+                    status = "يعمل بملء الشاشة دون إطار";
+                    statusColor = Theme.Ok;
                     break;
                 case GameState.Waiting:
-                    status = "● ننتظر اللعبة تظهر…";
-                    statusColor = Theme.Amber;
+                    status = "بانتظار ظهور نافذة اللعبة";
+                    statusColor = Theme.Wait;
                     break;
                 default:
-                    status = Store.Paused ? "● البرنامج موقوف" : "● مطفي لهذي اللعبة";
+                    status = Store.Paused ? "الخدمة متوقفة" : "التحويل معطّل لهذه اللعبة";
                     statusColor = Theme.Muted;
                     break;
             }
-            TextRenderer.DrawText(g, status, Theme.Font(10, FontStyle.Bold),
-                new Rectangle(textLeft, (int) r.Y + 46, textRight - textLeft, 22), statusColor, flags);
 
-            // switch
-            var sw = SwitchRect;
-            var swOn = on && !Store.Skipped.Contains(Game.ExeName);
-            using (var sp = Theme.Round(sw, sw.Height / 2f))
-            {
-                if (swOn)
-                {
-                    using (var b = new LinearGradientBrush(sw, accent[0], accent[1], 0f)) g.FillPath(b, sp);
-                }
-                else
-                {
-                    using (var b = new SolidBrush(Theme.Gray)) g.FillPath(b, sp);
-                }
-            }
-            var knobX = swOn ? sw.Left + 4 : sw.Right - sw.Height + 4; // RTL: "on" knob sits left
-            using (var knob = new SolidBrush(Color.White))
-            {
-                g.FillEllipse(knob, knobX, sw.Top + 4, sw.Height - 8, sw.Height - 8);
-            }
+            var textRight = (int) tile.X - 14;
+            var textLeft = SwitchRect.Right + 18;
+            var flags = TextFormatFlags.Right | TextFormatFlags.RightToLeft | TextFormatFlags.EndEllipsis |
+                        TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
+            TextRenderer.DrawText(g, Game.DisplayName, Theme.Font(11.5f, FontStyle.Bold),
+                new Rectangle(textLeft, (int) r.Y + 14, textRight - textLeft, 24), Theme.Text, flags);
+
+            // small status dot + text
+            var statusRect = new Rectangle(textLeft, (int) r.Y + 42, textRight - textLeft - 14, 20);
+            using (var b = new SolidBrush(statusColor)) g.FillEllipse(b, textRight - 8, statusRect.Y + 7, 7, 7);
+            TextRenderer.DrawText(g, status, Theme.Font(9.5f), statusRect, Theme.Muted, flags);
+
+            DrawSwitch(g, SwitchRect, Game.State != GameState.Off);
         }
     }
 
@@ -236,16 +213,17 @@ namespace KaitoLight
     {
         public Color Fill { get; set; } = Theme.Card;
         public Color FillHover { get; set; } = Theme.CardHover;
+        public Color Outline { get; set; } = Theme.Border;
 
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             Theme.Smooth(g);
-            var r = new RectangleF(1, 1, Width - 3, Height - 3);
-            using (var p = Theme.Round(r, r.Height / 2))
-            using (var b = new SolidBrush(Hover ? FillHover : Fill))
+            var r = new RectangleF(0.5f, 0.5f, Width - 2, Height - 2);
+            using (var p = Theme.Round(r, 10))
             {
-                g.FillPath(b, p);
+                using (var b = new SolidBrush(Hover ? FillHover : Fill)) g.FillPath(b, p);
+                using (var pen = new Pen(Outline)) g.DrawPath(pen, p);
             }
             TextRenderer.DrawText(g, Text, Font, ClientRectangle, ForeColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.RightToLeft);

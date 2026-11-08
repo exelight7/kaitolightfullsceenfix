@@ -17,7 +17,7 @@ namespace KaitoLight
         {
             _iconFor = iconFor;
 
-            Text = "أضف لعبتك";
+            Text = "إضافة لعبة";
             ClientSize = new Size(480, 520);
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -34,7 +34,7 @@ namespace KaitoLight
                 Dock = DockStyle.Top,
                 Height = 64,
                 Padding = new Padding(16, 12, 16, 0),
-                Text = "تأكد إن لعبتك شغّالة، واختارها من القائمة.\nبنتذكرها ونحوّلها Borderless كل مرة تفتحها.",
+                Text = "تأكّد من تشغيل اللعبة، ثم اخترها من القائمة.\nسيتذكّرها البرنامج ويحوّلها تلقائيًا في كل مرة تُشغَّل فيها.",
                 ForeColor = Theme.Muted,
                 TextAlign = ContentAlignment.MiddleRight
             };
@@ -57,11 +57,12 @@ namespace KaitoLight
             var bottom = new Panel { Dock = DockStyle.Bottom, Height = 66, Padding = new Padding(16, 12, 16, 12) };
             var ok = new FlatButton
             {
-                Text = "✔  هذي لعبتي",
-                Font = Theme.Font(11, FontStyle.Bold),
-                ForeColor = Color.White,
-                Fill = Theme.Violet,
-                FillHover = Color.FromArgb(150, 120, 255),
+                Text = "إضافة",
+                Font = Theme.Font(10.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(240, 244, 243),
+                Fill = Theme.AccentDim,
+                FillHover = Theme.Accent,
+                Outline = Theme.AccentDim,
                 Dock = DockStyle.Right,
                 Width = 180
             };
@@ -86,7 +87,7 @@ namespace KaitoLight
 
             if (windows.Count == 0)
             {
-                hint.Text = "ما لقينا نوافذ مفتوحة.\nشغّل لعبتك أول، وبعدين ارجع هنا.";
+                hint.Text = "لا توجد نوافذ مفتوحة حاليًا.\nشغّل اللعبة أولًا، ثم أعد فتح هذه النافذة.";
             }
         }
 
@@ -117,7 +118,7 @@ namespace KaitoLight
             if (selected)
             {
                 using (var p = Theme.Round(r, 10))
-                using (var b = new SolidBrush(Theme.Violet))
+                using (var b = new SolidBrush(Theme.AccentDim))
                 {
                     g.FillPath(b, p);
                 }
@@ -129,9 +130,9 @@ namespace KaitoLight
             var text = new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 64, e.Bounds.Height);
             var flags = TextFormatFlags.Right | TextFormatFlags.RightToLeft | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
             TextRenderer.DrawText(g, w.DisplayName, Theme.Font(10.5f, FontStyle.Bold),
-                new Rectangle(text.X, text.Y + 4, text.Width, 20), Color.White, flags);
+                new Rectangle(text.X, text.Y + 4, text.Width, 20), Theme.Text, flags);
             TextRenderer.DrawText(g, w.ExeName + ".exe", Theme.Font(8.5f),
-                new Rectangle(text.X, text.Y + 24, text.Width, 18), selected ? Color.FromArgb(225, 225, 255) : Theme.Muted, flags);
+                new Rectangle(text.X, text.Y + 24, text.Width, 18), selected ? Color.FromArgb(200, 214, 212) : Theme.Muted, flags);
         }
     }
 }

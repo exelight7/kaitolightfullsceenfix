@@ -14,15 +14,17 @@ namespace KaitoLight
             {
                 if (!isNew)
                 {
-                    MessageBox.Show("KaitoLight شغّال من قبل — تلقاه بجنب الساعة في شريط المهام.", "KaitoLight",
+                    MessageBox.Show("البرنامج يعمل بالفعل. يمكنك الوصول إليه من منطقة الإشعارات بجوار الساعة.", "KaitoLight",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                var startHidden = Array.Exists(args, a => a.Equals("--tray", StringComparison.OrdinalIgnoreCase));
-                Application.Run(new MainForm(startHidden));
+                // Lives in the notification area; "--show" opens the window on start, "--tray" starts silently (used at sign-in)
+                var showWindow = Array.Exists(args, a => a.Equals("--show", StringComparison.OrdinalIgnoreCase));
+                var silent = Array.Exists(args, a => a.Equals("--tray", StringComparison.OrdinalIgnoreCase));
+                Application.Run(new MainForm(!showWindow, silent));
             }
         }
     }
