@@ -1,35 +1,40 @@
-# KaitoLight Fullscreen Fix 🎮
+# ⚡ KaitoLight
 
-خلّ أي لعبة تشتغل **ملء الشاشة بلا حدود** (Borderless Fullscreen) بضغطة وحدة، وتقدر تطلع منها بـ Alt+Tab بسرعة وبدون وميض أو شاشة سوداء.
+يحوّل ألعابك **Borderless ملء الشاشة** تلقائياً، وبدون ما تضغط شي.
+تقدر تطلع من اللعبة بـ Alt+Tab على طول، بدون وميض ولا شاشة سوداء.
 
 ## ⬇️ التحميل والتشغيل
 
-1. نزّل **KaitoLight-FullscreenFix.zip** من صفحة [Releases](https://github.com/exelight7/kaitolightfullsceenfix/releases/latest).
-2. فك الضغط في أي مكان.
-3. افتح `BorderlessGaming.exe` ووافق على صلاحية المسؤول.
-4. شغّل لعبتك بوضع **Windowed** (نافذة)، وبتطلع في شريط **"ألعابك"**. اضغط عليها وخلاص ✔
+1. نزّل **KaitoLight-v2.0.zip** من صفحة [Releases](https://github.com/exelight7/kaitolightfullsceenfix/releases/latest).
+2. فك الضغط، وافتح `KaitoLight.exe`، ووافق على صلاحية المسؤول.
+3. شغّل أي لعبة، وبتصير ملء الشاشة بلا حدود بنفسها 🎮
 
 > يحتاج .NET Framework 4.8، وهو موجود أصلاً في ويندوز 10 و 11.
+>
+> ⚠️ البرنامج غير موقّع رقمياً. إذا كانت ميزة **Smart App Control** شغّالة عندك، بيمنعه ويندوز من التشغيل.
 
 ## ✨ المميزات
 
-- **يعرف ألعابك تلقائياً**: Steam و Epic و GOG و Riot و Ubisoft و EA و Xbox، وألعاب Unity و Unreal.
-- **بطاقات ملوّنة بضغطة وحدة**: اضغط مرة تصير اللعبة ملء الشاشة، واضغط مرة ثانية ترجع لشكلها.
-- **⚡ وضع تلقائي**: فعّله وأي لعبة تفتحها تصير بلا حدود بنفسها.
-- **واجهة داكنة ملوّنة**، والألعاب تطلع أول القائمة.
-- **يشتغل من أي مجلد** بدون تثبيت.
-- كل خيارات Borderless Gaming الأصلية موجودة: المفضلة، اختيار الشاشة، إخفاء شريط المهام والماوس، والاختصارات.
+- **تلقائي وغصب**: أي لعبة تفتحها تتحوّل Borderless. ولو رجّعت اللعبة الإطار، يحوّلها من جديد.
+- **يعرف ألعابك**: Steam و Epic و GOG و Riot و Ubisoft و EA و Xbox و Battle.net و Rockstar، وألعاب Unity و Unreal و Godot و GameMaker و RPG Maker.
+- **شاشة وحدة بسيطة**: زر تشغيل وإيقاف كبير، وبطاقة لكل لعبة فيها مفتاح خاص.
+- **لعبتك ما طلعت؟** اضغط "+ أضفها" واخترها، وبيتذكرها كل مرة.
+- **يشتغل بالخلفية** جنب الساعة، وفيه خيار يخليه يشتغل مع ويندوز.
+- **ملف واحد** حجمه 42 كيلوبايت، بدون تثبيت ولا مكتبات زيادة.
+- إذا طلعت منه، يرجّع الألعاب لشكلها الأصلي.
 
 ## 🛠️ البناء من الكود
 
 يحتاج Visual Studio 2022 أو Build Tools مع حزمة .NET Framework 4.8:
 
 ```
-msbuild BorderlessGaming.sln /restore /p:Configuration=Release
+msbuild KaitoLight\KaitoLight.csproj /p:Configuration=Release
 ```
 
-الناتج يكون في `BorderlessGaming\bin\Release\`.
+الناتج يكون في `KaitoLight\bin\Release\KaitoLight.exe`.
+
+مجلد `BorderlessGaming` فيه الإصدار القديم v1.0، وهو مبني على Borderless Gaming.
 
 ## 📜 الترخيص
 
-مبني على [Borderless Gaming](https://github.com/Codeusa/Borderless-Gaming) من Codeusa، ومرخّص بـ GPLv2. التفاصيل في ملف [LICENSE](LICENSE).
+GPLv2. الإصدار v1.0 مبني على [Borderless Gaming](https://github.com/Codeusa/Borderless-Gaming) من Codeusa. التفاصيل في ملف [LICENSE](LICENSE).
